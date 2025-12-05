@@ -1,0 +1,191 @@
+#include <Adafruit_NeoPixel.h>
+#include <LiquidCrystal.h>
+
+#define PIN_NEOPIXEL 3
+#define NUM_PIXELS 64
+
+#define CLK 9
+#define DT 10
+#define SW 11
+
+#define BUZZER 6
+
+LiquidCrystal lcd(13, 12, 8, 7, 4, 2);
+
+Adafruit_NeoPixel matriz(NUM_PIXELS, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
+
+
+int lastCLK;
+int colorID = 0;
+
+uint32_t colores[] = {
+  matriz.Color(255, 0, 0),    
+  matriz.Color(0, 0, 255),    
+  matriz.Color(255, 255, 0),  
+  matriz.Color(0, 255, 0),    
+  matriz.Color(128, 0, 128),  
+  matriz.Color(255, 128, 0),  
+  matriz.Color(0, 255, 255),  
+  matriz.Color(255, 0, 255)   
+};
+
+String nombres[] = {
+  "Rojo", "Azul", "Amarillo", "Verde",
+  "Morado", "Naranja", "Celeste", "Rosa"
+};
+
+int codigo[8];
+int intento[8];
+
+int filaActual = 0;
+int posActual = 0;
+
+bool lastButton = HIGH;  
+bool button;
+
+void beepOK() {
+  tone(BUZZER, 1200, 120);
+}
+
+void beepError() {
+  tone(BUZZER, 450, 300);
+}
+
+void beepWin() {
+  tone(BUZZER, 1500, 200);
+  delay(250);
+  tone(BUZZER, 2000, 300);
+}
+
+
+void setup() {
+  matriz.begin();
+  matriz.show();
+
+  lcd.begin(16, 2);
+
+  pinMode(CLK, INPUT);
+  pinMode(DT, INPUT);
+  pinMode(SW, INPUT_PULLUP);
+  pinMode(BUZZER, OUTPUT);
+
+  lastCLK = digitalRead(CLK);
+
+  lcd.clear();
+  lcd.print("Mastermind 8x8");
+  delay(1500);
+
+  lcd.clear();
+  lcd.print("Presione boton");
+
+  while (digitalRead(SW) == HIGH);
+
+  beepOK();
+
+  lcd.clear();
+  lcd.print("Generando codigo");
+
+  for (int i = 0; i < 8; i++) {
+    codigo[i] = random(0, 8);
+  }
+
+  delay(1500);
+
+  lcd.clear();
+  lcd.print("Gire encoder");
+  lcd.setCursor(0, 1);
+  lcd.print("y confirme");
+}
+
+
+void loop() {
+
+  int currentCLK = digitalRead(CLK);
+
+  if (currentCLK != lastCLK && currentCLK == 1) {
+    if (digitalRead(DT) != currentCLK) {
+      colorID++;
+    } else {
+      colorID--;
+    }
+
+    if (colorID < 0) colorID = 7;
+    if (colorID > 7) colorID = 0;
+
+    matriz.setPixelColor(filaActual * 8 + posActual, colores[colorID]);
+    matriz.show();
+
+    lcd.setCursor(0, 0);
+    lcd.print("Color: ");
+    lcd.print(nombres[colorID]);
+    lcd.print("    ");
+  }
+
+  lastCLK = currentCLK;
+
+  button = digitalRead(SW);
+
+  if (button == LOW && lastButton == HIGH) {
+    beepOK();
+
+    intento[posActual] = colorID;
+    posActual++;
+
+    if (posActual >= 8) {
+      compararFila();
+      posActual = 0;
+      filaActual++;
+    }
+
+    delay(200);
+  }
+
+  lastButton = button;
+
+  if (filaActual >= 8) {
+    lcd.clear();
+    lcd.print("Perdiste");
+    for (int i = 0; i < 3; i++) {
+      tone(BUZZER, 300, 400);
+      delay(500);
+    }
+    while (1);
+  }
+}
+
+
+void compararFila() {
+  bool todoBien = true;
+
+  for (int i = 0; i < 8; i++) {
+    if (intento[i] != codigo[i]) {
+      todoBien = false;
+    }
+  }
+
+  matriz.show();
+
+  if (todoBien) {
+    lcd.clear();
+    lcd.print("GANASTE!");
+    beepWin();
+    while (1);
+  }
+
+  beepError();
+
+  lcd.clear();
+  lcd.print("El codigo");
+  lcd.setCursor(0, 1);
+  lcd.print("esta mal");
+  delay(1500);
+
+  lcd.clear();
+  lcd.print("Nueva fila...");
+  delay(1000);
+
+  lcd.clear();
+  lcd.print("Gire encoder");
+  lcd.setCursor(0,1);
+  lcd.print("y confirme");
+}

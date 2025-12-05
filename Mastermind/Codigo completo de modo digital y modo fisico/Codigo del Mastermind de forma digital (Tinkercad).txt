@@ -1,0 +1,197 @@
+#include <Adafruit_NeoPixel.h>
+#include <LiquidCrystal.h>
+
+#define PIN_NEOPIXEL 3
+#define NUM_PIXELS 64
+#define PIN_BOTON A5
+#define PIN_POT A0
+#define PIN_BUZZER 6
+
+Adafruit_NeoPixel matriz(NUM_PIXELS, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
+LiquidCrystal lcd(13, 12, 8, 7, 4, 2);
+
+String nombresColores[] = {
+  "Rojo", "Verde", "Azul", "Amarillo",
+  "Morado", "Celeste", "Blanco", "Naranja"
+};
+
+uint32_t valoresColores[] = {
+  Adafruit_NeoPixel::Color(255, 0, 0),
+  Adafruit_NeoPixel::Color(0, 255, 0),
+  Adafruit_NeoPixel::Color(0, 0, 255),
+  Adafruit_NeoPixel::Color(255, 255, 0),
+  Adafruit_NeoPixel::Color(150, 0, 200),
+  Adafruit_NeoPixel::Color(0, 255, 255),
+  Adafruit_NeoPixel::Color(255, 255, 255),
+  Adafruit_NeoPixel::Color(255, 120, 0)
+};
+
+const int CANT_COLORES = 8;
+
+int codigoSecreto[8];
+
+void beepConfirm() {     
+  tone(PIN_BUZZER, 1000, 120);
+}
+
+void beepError() {       
+  tone(PIN_BUZZER, 200, 350);
+  delay(350);
+}
+
+void beepWin() {         
+  tone(PIN_BUZZER, 900, 150);
+  delay(160);
+  tone(PIN_BUZZER, 1200, 200);
+  delay(220);
+  tone(PIN_BUZZER, 1500, 250);
+  delay(260);
+}
+
+void beepLose() {         
+  for (int i = 0; i < 3; i++) {
+    tone(PIN_BUZZER, 180, 300);
+    delay(350);
+  }
+}
+
+void esperarBoton() {
+  while (!digitalRead(PIN_BOTON));
+  delay(250);
+}
+
+void setFilaColor(int fila, int pos, uint32_t color) {
+  matriz.setPixelColor(fila * 8 + pos, color);
+  matriz.show();
+}
+
+void limpiarFila(int fila) {
+  for (int i = 0; i < 8; i++) {
+    matriz.setPixelColor(fila * 8 + i, 0);
+  }
+  matriz.show();
+}
+
+void generarCodigo() {
+  for (int i = 0; i < 8; i++) {
+    codigoSecreto[i] = random(CANT_COLORES);
+  }
+}
+
+void mostrarErrores(int intento[], int fila) {
+  String errores = "";
+  int cantidadErrores = 0;
+
+  for (int i = 0; i < 8; i++) {
+    if (intento[i] != codigoSecreto[i]) {
+      if (cantidadErrores > 0) errores += ", ";
+      errores += nombresColores[intento[i]];
+      cantidadErrores++;
+    }
+  }
+
+  lcd.clear();
+
+  if (cantidadErrores == 0) {
+    lcd.setCursor(0, 0);
+    lcd.print("   GANASTE!!!");
+    lcd.setCursor(0, 1);
+    lcd.print("Perfecto :)");
+    beepWin();
+    return;
+  }
+
+  lcd.setCursor(0, 0);
+  lcd.print("El codigo esta mal");
+
+  String linea2 = errores;
+  if (linea2.length() > 16) linea2 = linea2.substring(0, 16);
+  lcd.setCursor(0, 1);
+  lcd.print(linea2);
+
+  beepError();
+  delay(1500);
+}
+
+void setup() {
+  pinMode(PIN_BOTON, INPUT); 
+  pinMode(PIN_BUZZER, OUTPUT);
+
+  matriz.begin();
+  matriz.clear();
+  matriz.show();
+
+  lcd.begin(16, 2);
+  randomSeed(analogRead(1));
+
+  lcd.setCursor(0, 0);
+  lcd.print(" Mastermind 8x8");
+  lcd.setCursor(0, 1);
+  lcd.print("Presione boton");
+
+  esperarBoton();
+  generarCodigo();
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Codigo listo!");
+  delay(1200);
+}
+
+void loop() {
+
+  int intento[8];
+
+  for (int fila = 0; fila < 8; fila++) {
+
+    limpiarFila(fila);
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Intento ");
+    lcd.print(fila + 1);
+
+    for (int pos = 0; pos < 8; pos++) {
+
+      while (!digitalRead(PIN_BOTON)) {
+
+        int lectura = analogRead(PIN_POT);
+        int colorIndex = map(lectura, 0, 1023, 0, CANT_COLORES - 1);
+        intento[pos] = colorIndex;
+
+        setFilaColor(fila, pos, valoresColores[colorIndex]);
+
+        lcd.setCursor(0, 1);
+        lcd.print("Color: ");
+        lcd.print(nombresColores[colorIndex]);
+        lcd.print("    ");
+
+        delay(80);
+      }
+
+      beepConfirm(); 
+      delay(250);
+      while (digitalRead(PIN_BOTON));
+      delay(120);
+    }
+
+    mostrarErrores(intento, fila);
+
+    bool gano = true;
+    for (int i = 0; i < 8; i++) {
+      if (intento[i] != codigoSecreto[i]) gano = false;
+    }
+    if (gano) {
+      for (;;) {} 
+    }
+  }
+
+  // perdiste
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Perdiste :(");
+  lcd.setCursor(0, 1);
+  lcd.print("Sin intentos");
+  beepLose();
+  while (1);
+}
